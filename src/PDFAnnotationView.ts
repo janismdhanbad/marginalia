@@ -4,7 +4,7 @@ import type PDFAnnotatorPlugin from './main';
 import { DrawingCanvas, Tool, Stroke, AnnotationData } from './DrawingCanvas';
 
 export const VIEW_TYPE_PDF_ANNOTATION = 'pdf-annotation-view';
-export const PLUGIN_VERSION = 'v0.3.2';  // Fix page dimensions
+export const PLUGIN_VERSION = 'v0.4.0';  // Radial menu for tool/color selection
 
 // Check if we're on mobile/tablet
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -50,6 +50,10 @@ export class PDFAnnotationView extends ItemView {
 	
 	// Intersection observer for lazy loading
 	private pageObserver: IntersectionObserver | null = null;
+	
+	// Radial menu for tool/color selection
+	private radialMenuEl: HTMLElement | null = null;
+	private radialMenuVisible: boolean = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: PDFAnnotatorPlugin) {
 		super(leaf);
@@ -85,6 +89,9 @@ export class PDFAnnotationView extends ItemView {
 
 		// Setup intersection observer for lazy loading
 		this.setupPageObserver();
+		
+		// Create radial menu (hidden by default)
+		this.createRadialMenu();
 
 		// Show welcome message
 		this.showWelcomeMessage();
@@ -203,6 +210,152 @@ export class PDFAnnotationView extends ItemView {
 				? `${this.currentVisiblePage} / ${this.totalPages}`
 				: '- / -';
 		}
+	}
+	
+	private createRadialMenu() {
+		// Define tools and colors for the radial menu
+		const menuItems = [
+			// Tools (top half)
+			{ type: 'tool', value: 'pen', icon: '✏️', label: 'Pen', angle: 270 },
+			{ type: 'tool', value: 'highlighter', icon: '🖍️', label: 'Highlight', angle: 315 },
+			{ type: 'tool', value: 'eraser', icon: '🧹', label: 'Eraser', angle: 225 },
+			{ type: 'tool', value: 'hand', icon: '🖐️', label: 'Hand', angle: 180 },
+			// Colors (bottom half)
+			{ type: 'color', value: '#000000', icon: '⬛', label: 'Black', angle: 0 },
+			{ type: 'color', value: '#FF0000', icon: '🔴', label: 'Red', angle: 45 },
+			{ type: 'color', value: '#0000FF', icon: '🔵', label: 'Blue', angle: 90 },
+			{ type: 'color', value: '#FFFF00', icon: '🟡', label: 'Yellow', angle: 135 },
+		];
+		
+		// Create radial menu container
+		const menu = document.createElement('div');
+		menu.className = 'radial-menu';
+		menu.style.display = 'none';
+		this.radialMenuEl = menu;
+		
+		// Create center (cancel/close)
+		const center = document.createElement('div');
+		center.className = 'radial-menu-center';
+		center.innerHTML = '✕';
+		center.addEventListener('pointerup', () => this.hideRadialMenu());
+		menu.appendChild(center);
+		
+		// Create menu items in a circle
+		const radius = 70; // Distance from center
+		menuItems.forEach(item => {
+			const itemEl = document.createElement('div');
+			itemEl.className = 'radial-menu-item';
+			itemEl.setAttribute('data-type', item.type);
+			itemEl.setAttribute('data-value', item.value);
+			
+			// Position using angle
+			const angleRad = (item.angle * Math.PI) / 180;
+			const x = Math.cos(angleRad) * radius;
+			const y = Math.sin(angleRad) * radius;
+			
+			itemEl.style.transform = `translate(${x}px, ${y}px)`;
+			itemEl.innerHTML = item.icon;
+			itemEl.title = item.label;
+			
+			// Add color indicator for color items
+			if (item.type === 'color') {
+				itemEl.style.setProperty('--item-color', item.value);
+			}
+			
+			// Handle selection
+			itemEl.addEventListener('pointerup', (e) => {
+				e.stopPropagation();
+				this.handleRadialMenuSelection(item.type, item.value);
+			});
+			
+			menu.appendChild(itemEl);
+		});
+		
+		// Add to container
+		this.containerEl.appendChild(menu);
+		
+		// Close menu when clicking outside
+		document.addEventListener('pointerdown', (e) => {
+			if (this.radialMenuVisible && this.radialMenuEl && 
+				!this.radialMenuEl.contains(e.target as Node)) {
+				this.hideRadialMenu();
+			}
+		});
+	}
+	
+	private showRadialMenu(x: number, y: number) {
+		if (!this.radialMenuEl) return;
+		
+		// Position the menu at the long press location
+		const containerRect = this.containerEl.getBoundingClientRect();
+		
+		// Clamp position to keep menu within view
+		const menuSize = 180; // Approximate menu diameter
+		const halfMenu = menuSize / 2;
+		
+		const clampedX = Math.max(halfMenu, Math.min(containerRect.width - halfMenu, x));
+		const clampedY = Math.max(halfMenu, Math.min(containerRect.height - halfMenu, y));
+		
+		this.radialMenuEl.style.left = `${clampedX}px`;
+		this.radialMenuEl.style.top = `${clampedY}px`;
+		this.radialMenuEl.style.display = 'flex';
+		this.radialMenuVisible = true;
+		
+		// Highlight current tool and color
+		this.radialMenuEl.querySelectorAll('.radial-menu-item').forEach(item => {
+			const type = item.getAttribute('data-type');
+			const value = item.getAttribute('data-value');
+			item.classList.remove('active');
+			
+			if (type === 'tool' && value === this.currentTool) {
+				item.classList.add('active');
+			}
+			if (type === 'color' && value === this.currentColor) {
+				item.classList.add('active');
+			}
+		});
+	}
+	
+	private hideRadialMenu() {
+		if (!this.radialMenuEl) return;
+		this.radialMenuEl.style.display = 'none';
+		this.radialMenuVisible = false;
+	}
+	
+	private handleRadialMenuSelection(type: string, value: string) {
+		if (type === 'tool') {
+			this.currentTool = value as Tool;
+			// Update toolbar UI
+			this.toolbarEl.querySelectorAll('.tool-btn').forEach(b => {
+				b.classList.remove('active');
+				if (b.getAttribute('data-tool') === value) {
+					b.classList.add('active');
+				}
+			});
+			// Apply to all canvases
+			this.pageElements.forEach(pe => {
+				if (pe.drawingCanvas) {
+					pe.drawingCanvas.setTool(value as Tool);
+				}
+			});
+		} else if (type === 'color') {
+			this.currentColor = value;
+			// Update toolbar UI
+			this.toolbarEl.querySelectorAll('.color-btn').forEach(b => {
+				b.classList.remove('active');
+				if (b.getAttribute('data-color') === value) {
+					b.classList.add('active');
+				}
+			});
+			// Apply to all canvases
+			this.pageElements.forEach(pe => {
+				if (pe.drawingCanvas) {
+					pe.drawingCanvas.setColor(value);
+				}
+			});
+		}
+		
+		this.hideRadialMenu();
 	}
 
 	private showWelcomeMessage() {
@@ -429,6 +582,16 @@ export class PDFAnnotationView extends ItemView {
 			// Apply current tool and color
 			pageElement.drawingCanvas.setTool(this.currentTool);
 			pageElement.drawingCanvas.setColor(this.currentColor);
+			
+			// Setup long press for radial menu
+			pageElement.drawingCanvas.onLongPress = (x, y) => {
+				// Convert canvas coords to container coords
+				const wrapperRect = pageElement.wrapper.getBoundingClientRect();
+				const containerRect = this.containerEl.getBoundingClientRect();
+				const menuX = wrapperRect.left - containerRect.left + x;
+				const menuY = wrapperRect.top - containerRect.top + y;
+				this.showRadialMenu(menuX, menuY);
+			};
 			
 			// Load annotations for this page if any
 			const strokes = this.pageAnnotations[pageNum];

@@ -44,6 +44,15 @@ export class DrawingCanvas {
 	private highlightRAF: number | null = null;
 	private needsHighlightUpdate: boolean = false;
 	
+	// Long press detection for radial menu
+	private longPressTimeout: number | null = null;
+	private longPressStartPos: { x: number; y: number } | null = null;
+	private readonly LONG_PRESS_DURATION = 500; // ms
+	private readonly LONG_PRESS_THRESHOLD = 10; // pixels - movement tolerance
+	
+	// Callback for long press
+	public onLongPress: ((x: number, y: number) => void) | null = null;
+	
 	// Drawing settings
 	private readonly PEN_MIN_WIDTH = 1;
 	private readonly PEN_MAX_WIDTH = 4;
@@ -145,6 +154,23 @@ export class DrawingCanvas {
 			return;
 		}
 		
+		// Start long press detection
+		this.longPressStartPos = { x: e.clientX, y: e.clientY };
+		this.longPressTimeout = window.setTimeout(() => {
+			if (this.longPressStartPos && this.onLongPress) {
+				// Trigger long press callback with canvas-relative position
+				const rect = this.canvas.getBoundingClientRect();
+				const x = this.longPressStartPos.x - rect.left;
+				const y = this.longPressStartPos.y - rect.top;
+				this.onLongPress(x, y);
+				
+				// Cancel drawing
+				this.isDrawing = false;
+				this.currentStroke = null;
+				this.longPressStartPos = null;
+			}
+		}, this.LONG_PRESS_DURATION);
+		
 		this.isDrawing = true;
 		this.canvas.setPointerCapture(e.pointerId);
 		
@@ -184,6 +210,15 @@ export class DrawingCanvas {
 	}
 
 	private handlePointerMove(e: PointerEvent) {
+		// Cancel long press if moved too far
+		if (this.longPressStartPos && this.longPressTimeout) {
+			const dx = e.clientX - this.longPressStartPos.x;
+			const dy = e.clientY - this.longPressStartPos.y;
+			if (Math.sqrt(dx * dx + dy * dy) > this.LONG_PRESS_THRESHOLD) {
+				this.cancelLongPress();
+			}
+		}
+		
 		if (!this.isDrawing || !this.currentStroke) return;
 		
 		// Get coalesced events for smoother lines
@@ -204,6 +239,9 @@ export class DrawingCanvas {
 	}
 
 	private handlePointerUp(e: PointerEvent) {
+		// Cancel long press detection
+		this.cancelLongPress();
+		
 		if (!this.isDrawing) return;
 		
 		this.isDrawing = false;
@@ -372,6 +410,15 @@ export class DrawingCanvas {
 		this.ctx.globalAlpha = 0.3;
 		this.ctx.drawImage(this.highlightCanvas, 0, 0);
 		this.ctx.restore();
+	}
+	
+	// Cancel long press detection
+	private cancelLongPress() {
+		if (this.longPressTimeout) {
+			window.clearTimeout(this.longPressTimeout);
+			this.longPressTimeout = null;
+		}
+		this.longPressStartPos = null;
 	}
 
 	// Redraw all strokes (used after resize or clear)

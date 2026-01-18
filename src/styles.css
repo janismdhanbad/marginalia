@@ -376,3 +376,165 @@
 .pdf-annotator-pdf-container::-webkit-scrollbar-thumb:hover {
 	background: var(--text-faint);
 }
+
+/* ============================================
+   Radial Menu - Long Press Tool/Color Selector
+   ============================================ */
+
+.radial-menu {
+	position: absolute;
+	width: 180px;
+	height: 180px;
+	transform: translate(-50%, -50%);
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	animation: radial-menu-appear 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes radial-menu-appear {
+	from {
+		opacity: 0;
+		transform: translate(-50%, -50%) scale(0.5);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, -50%) scale(1);
+	}
+}
+
+/* Center close button */
+.radial-menu-center {
+	position: absolute;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	background: var(--background-primary);
+	border: 2px solid var(--background-modifier-border);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 16px;
+	color: var(--text-muted);
+	cursor: pointer;
+	pointer-events: auto;
+	z-index: 10;
+	transition: all 0.15s ease;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.radial-menu-center:hover {
+	background: var(--background-modifier-error);
+	color: white;
+	border-color: transparent;
+}
+
+/* Menu items arranged in circle */
+.radial-menu-item {
+	position: absolute;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	background: var(--background-primary);
+	border: 2px solid var(--background-modifier-border);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+	cursor: pointer;
+	pointer-events: auto;
+	transition: all 0.15s ease;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.radial-menu-item:hover {
+	transform: translate(var(--tx, 0), var(--ty, 0)) scale(1.15);
+	background: var(--background-secondary);
+	border-color: var(--interactive-accent);
+}
+
+.radial-menu-item.active {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 3px rgba(var(--interactive-accent-rgb), 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Color items - show actual color */
+.radial-menu-item[data-type="color"] {
+	font-size: 0;
+	background: var(--item-color, #000);
+}
+
+.radial-menu-item[data-type="color"]:hover {
+	border-color: var(--text-normal);
+}
+
+.radial-menu-item[data-type="color"].active {
+	border-color: white;
+	box-shadow: 0 0 0 3px var(--text-normal), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Light colors need darker border */
+.radial-menu-item[data-value="#FFFF00"],
+.radial-menu-item[data-value="#f1c40f"] {
+	border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Backdrop overlay to capture outside clicks */
+.radial-menu::before {
+	content: '';
+	position: fixed;
+	top: -100vh;
+	left: -100vw;
+	width: 300vw;
+	height: 300vh;
+	background: rgba(0, 0, 0, 0.1);
+	pointer-events: auto;
+	z-index: -1;
+}
+
+/* Tooltip hint */
+.radial-menu-item::after {
+	content: attr(title);
+	position: absolute;
+	bottom: -24px;
+	left: 50%;
+	transform: translateX(-50%);
+	font-size: 10px;
+	color: var(--text-muted);
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+	pointer-events: none;
+}
+
+.radial-menu-item:hover::after {
+	opacity: 1;
+}
+
+/* Mobile optimizations for radial menu */
+@media (pointer: coarse) {
+	.radial-menu {
+		width: 220px;
+		height: 220px;
+	}
+	
+	.radial-menu-center {
+		width: 52px;
+		height: 52px;
+		font-size: 20px;
+	}
+	
+	.radial-menu-item {
+		width: 52px;
+		height: 52px;
+		font-size: 22px;
+	}
+	
+	/* Disable hover tooltip on touch */
+	.radial-menu-item::after {
+		display: none;
+	}
+}
