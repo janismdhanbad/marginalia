@@ -58,15 +58,29 @@ export class DrawingCanvas {
 	private readonly PEN_MAX_WIDTH = 4;
 	private readonly HIGHLIGHTER_WIDTH = 20;
 	private readonly ERASER_WIDTH = 30;
+	
+	// High-DPI support
+	private dpr: number = 1;
+	private displayWidth: number;
+	private displayHeight: number;
 
-	constructor(container: HTMLElement, width: number, height: number) {
+	constructor(container: HTMLElement, width: number, height: number, dpr: number = 1) {
 		this.containerEl = container;
+		this.dpr = dpr;
+		this.displayWidth = width;
+		this.displayHeight = height;
 		
-		// Create canvas element
+		// Create canvas element with high-DPI support
 		this.canvas = document.createElement('canvas');
 		this.canvas.className = 'pdf-annotator-drawing-canvas';
-		this.canvas.width = width;
-		this.canvas.height = height;
+		
+		// Set canvas to high resolution
+		this.canvas.width = Math.floor(width * dpr);
+		this.canvas.height = Math.floor(height * dpr);
+		
+		// But display at normal size
+		this.canvas.style.width = `${width}px`;
+		this.canvas.style.height = `${height}px`;
 		
 		const ctx = this.canvas.getContext('2d', { 
 			willReadFrequently: false,
@@ -77,6 +91,9 @@ export class DrawingCanvas {
 			throw new Error('Could not get canvas context');
 		}
 		this.ctx = ctx;
+		
+		// Scale context to match DPR for crisp lines
+		this.ctx.scale(dpr, dpr);
 		
 		// Enable smooth rendering
 		this.ctx.lineCap = 'round';
@@ -184,6 +201,7 @@ export class DrawingCanvas {
 			this.highlightCanvas.height = this.canvas.height;
 			this.highlightCtx = this.highlightCanvas.getContext('2d');
 			if (this.highlightCtx) {
+				this.highlightCtx.scale(this.dpr, this.dpr);  // Match main canvas DPR
 				this.highlightCtx.lineCap = 'round';
 				this.highlightCtx.lineJoin = 'round';
 			}

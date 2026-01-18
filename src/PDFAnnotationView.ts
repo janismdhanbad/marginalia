@@ -4,7 +4,7 @@ import type PDFAnnotatorPlugin from './main';
 import { DrawingCanvas, Tool, Stroke, AnnotationData } from './DrawingCanvas';
 
 export const VIEW_TYPE_PDF_ANNOTATION = 'pdf-annotation-view';
-export const PLUGIN_VERSION = 'v0.4.0';  // Radial menu for tool/color selection
+export const PLUGIN_VERSION = 'v0.5.1';  // Pinch-to-zoom support
 
 // Check if we're on mobile/tablet
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -33,7 +33,10 @@ export class PDFAnnotationView extends ItemView {
 	
 	private pdfDoc: pdfjsLib.PDFDocumentProxy | null = null;
 	private totalPages: number = 0;
-	private scale: number = 1.5;
+	private scale: number = 1.5;  // Display scale (zoom level)
+	private readonly MIN_SCALE = 0.5;
+	private readonly MAX_SCALE = 4.0;
+	private readonly SCALE_STEP = 0.25;
 	private currentFile: TFile | null = null;
 	
 	// Page elements for continuous scroll
@@ -54,6 +57,14 @@ export class PDFAnnotationView extends ItemView {
 	// Radial menu for tool/color selection
 	private radialMenuEl: HTMLElement | null = null;
 	private radialMenuVisible: boolean = false;
+	
+	// Zoom indicator
+	private zoomIndicator!: HTMLSpanElement;
+	
+	// Pinch-to-zoom state
+	private pinchStartDistance: number = 0;
+	private pinchStartScale: number = 1;
+	private isPinching: boolean = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: PDFAnnotatorPlugin) {
 		super(leaf);
@@ -92,6 +103,9 @@ export class PDFAnnotationView extends ItemView {
 		
 		// Create radial menu (hidden by default)
 		this.createRadialMenu();
+		
+		// Setup pinch-to-zoom
+		this.setupPinchZoom();
 
 		// Show welcome message
 		this.showWelcomeMessage();
@@ -119,6 +133,57 @@ export class PDFAnnotationView extends ItemView {
 			}
 		);
 	}
+	
+	private setupPinchZoom() {
+		// Calculate distance between two touch points
+		const getTouchDistance = (touches: TouchList): number => {
+			if (touches.length < 2) return 0;
+			const dx = touches[0].clientX - touches[1].clientX;
+			const dy = touches[0].clientY - touches[1].clientY;
+			return Math.sqrt(dx * dx + dy * dy);
+		};
+		
+		this.pdfContainerEl.addEventListener('touchstart', (e: TouchEvent) => {
+			if (e.touches.length === 2) {
+				// Start pinch gesture
+				this.isPinching = true;
+				this.pinchStartDistance = getTouchDistance(e.touches);
+				this.pinchStartScale = this.scale;
+				e.preventDefault();
+			}
+		}, { passive: false });
+		
+		this.pdfContainerEl.addEventListener('touchmove', (e: TouchEvent) => {
+			if (this.isPinching && e.touches.length === 2) {
+				const currentDistance = getTouchDistance(e.touches);
+				const ratio = currentDistance / this.pinchStartDistance;
+				
+				// Calculate new scale
+				let newScale = this.pinchStartScale * ratio;
+				newScale = Math.max(this.MIN_SCALE, Math.min(this.MAX_SCALE, newScale));
+				
+				// Only update if scale changed significantly (avoid jitter)
+				if (Math.abs(newScale - this.scale) > 0.02) {
+					this.scale = newScale;
+					this.updateZoomIndicator();
+				}
+				
+				e.preventDefault();
+			}
+		}, { passive: false });
+		
+		this.pdfContainerEl.addEventListener('touchend', (e: TouchEvent) => {
+			if (this.isPinching) {
+				this.isPinching = false;
+				// Re-render pages at new zoom level
+				this.reRenderAllPages();
+			}
+		});
+		
+		this.pdfContainerEl.addEventListener('touchcancel', () => {
+			this.isPinching = false;
+		});
+	}
 
 	private createToolbar() {
 		// File controls
@@ -135,6 +200,33 @@ export class PDFAnnotationView extends ItemView {
 		const navGroup = this.toolbarEl.createDiv({ cls: 'toolbar-group nav-group' });
 		this.pageIndicator = navGroup.createSpan({ cls: 'page-indicator' });
 		this.updatePageIndicator();
+		
+		// Zoom controls
+		const zoomGroup = this.toolbarEl.createDiv({ cls: 'toolbar-group zoom-group' });
+		
+		const zoomOutBtn = zoomGroup.createEl('button', {
+			cls: 'toolbar-btn zoom-btn',
+			attr: { 'aria-label': 'Zoom Out' }
+		});
+		zoomOutBtn.innerHTML = '−';
+		zoomOutBtn.addEventListener('click', () => this.zoomOut());
+		
+		this.zoomIndicator = zoomGroup.createSpan({ cls: 'zoom-indicator' });
+		this.updateZoomIndicator();
+		
+		const zoomInBtn = zoomGroup.createEl('button', {
+			cls: 'toolbar-btn zoom-btn',
+			attr: { 'aria-label': 'Zoom In' }
+		});
+		zoomInBtn.innerHTML = '+';
+		zoomInBtn.addEventListener('click', () => this.zoomIn());
+		
+		const fitWidthBtn = zoomGroup.createEl('button', {
+			cls: 'toolbar-btn',
+			attr: { 'aria-label': 'Fit Width' }
+		});
+		fitWidthBtn.innerHTML = '↔️';
+		fitWidthBtn.addEventListener('click', () => this.fitToWidth());
 
 		// Drawing tools
 		const toolGroup = this.toolbarEl.createDiv({ cls: 'toolbar-group tool-group' });
@@ -210,6 +302,92 @@ export class PDFAnnotationView extends ItemView {
 				? `${this.currentVisiblePage} / ${this.totalPages}`
 				: '- / -';
 		}
+	}
+	
+	private updateZoomIndicator() {
+		if (this.zoomIndicator) {
+			this.zoomIndicator.textContent = `${Math.round(this.scale * 100)}%`;
+		}
+	}
+	
+	private zoomIn() {
+		if (this.scale < this.MAX_SCALE) {
+			this.scale = Math.min(this.MAX_SCALE, this.scale + this.SCALE_STEP);
+			this.updateZoomIndicator();
+			this.reRenderAllPages();
+		}
+	}
+	
+	private zoomOut() {
+		if (this.scale > this.MIN_SCALE) {
+			this.scale = Math.max(this.MIN_SCALE, this.scale - this.SCALE_STEP);
+			this.updateZoomIndicator();
+			this.reRenderAllPages();
+		}
+	}
+	
+	private async fitToWidth() {
+		if (!this.pdfDoc) return;
+		
+		try {
+			// Get first page to calculate fit
+			const page = await this.pdfDoc.getPage(1);
+			const defaultViewport = page.getViewport({ scale: 1 });
+			
+			// Calculate scale to fit container width (with some padding)
+			const containerWidth = this.pdfContainerEl.clientWidth - 60; // 20px padding + scrollbar
+			this.scale = containerWidth / defaultViewport.width;
+			
+			// Clamp to min/max
+			this.scale = Math.max(this.MIN_SCALE, Math.min(this.MAX_SCALE, this.scale));
+			
+			this.updateZoomIndicator();
+			this.reRenderAllPages();
+		} catch (error) {
+			console.error('Marginalia: Error fitting to width:', error);
+		}
+	}
+	
+	private async reRenderAllPages() {
+		if (!this.pdfDoc) return;
+		
+		// Save current scroll position ratio
+		const scrollRatio = this.pdfContainerEl.scrollTop / (this.pdfContainerEl.scrollHeight || 1);
+		
+		// Mark all pages as not rendered
+		this.pageElements.forEach(pe => {
+			// Save annotations before re-rendering
+			if (pe.drawingCanvas && pe.rendered) {
+				this.pageAnnotations[pe.pageNum] = pe.drawingCanvas.getStrokes();
+				pe.drawingCanvas.destroy();
+				pe.drawingCanvas = null;
+			}
+			pe.rendered = false;
+		});
+		
+		// Re-render visible pages
+		const visiblePageNums: number[] = [];
+		this.pageElements.forEach((pe, idx) => {
+			const rect = pe.wrapper.getBoundingClientRect();
+			const containerRect = this.pdfContainerEl.getBoundingClientRect();
+			if (rect.bottom > containerRect.top && rect.top < containerRect.bottom) {
+				visiblePageNums.push(idx + 1);
+			}
+		});
+		
+		// Render at least the current visible page
+		if (visiblePageNums.length === 0 && this.currentVisiblePage > 0) {
+			visiblePageNums.push(this.currentVisiblePage);
+		}
+		
+		for (const pageNum of visiblePageNums) {
+			await this.renderPageIfNeeded(pageNum);
+		}
+		
+		// Restore scroll position
+		requestAnimationFrame(() => {
+			this.pdfContainerEl.scrollTop = scrollRatio * this.pdfContainerEl.scrollHeight;
+		});
 	}
 	
 	private createRadialMenu() {
@@ -547,13 +725,28 @@ export class PDFAnnotationView extends ItemView {
 
 		try {
 			const page = await this.pdfDoc.getPage(pageNum);
+			
+			// Use devicePixelRatio for crisp rendering on high-DPI displays
+			const dpr = window.devicePixelRatio || 1;
 			const viewport = page.getViewport({ scale: this.scale });
+			
+			// CSS dimensions (display size)
+			const displayWidth = Math.floor(viewport.width);
+			const displayHeight = Math.floor(viewport.height);
+			
+			// Canvas dimensions (actual pixel resolution for crisp rendering)
+			const canvasWidth = Math.floor(viewport.width * dpr);
+			const canvasHeight = Math.floor(viewport.height * dpr);
 
-			// Update wrapper and canvas size if different from placeholder
-			pageElement.wrapper.style.width = `${viewport.width}px`;
-			pageElement.wrapper.style.height = `${viewport.height}px`;
-			pageElement.pdfCanvas.width = viewport.width;
-			pageElement.pdfCanvas.height = viewport.height;
+			// Update wrapper size (CSS pixels)
+			pageElement.wrapper.style.width = `${displayWidth}px`;
+			pageElement.wrapper.style.height = `${displayHeight}px`;
+			
+			// Set canvas to high-resolution
+			pageElement.pdfCanvas.width = canvasWidth;
+			pageElement.pdfCanvas.height = canvasHeight;
+			pageElement.pdfCanvas.style.width = `${displayWidth}px`;
+			pageElement.pdfCanvas.style.height = `${displayHeight}px`;
 
 			const ctx = pageElement.pdfCanvas.getContext('2d');
 			if (!ctx) {
@@ -561,22 +754,26 @@ export class PDFAnnotationView extends ItemView {
 				return;
 			}
 
-			// Fill with white background
+			// Fill with white background at full resolution
 			ctx.fillStyle = 'white';
-			ctx.fillRect(0, 0, viewport.width, viewport.height);
+			ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
+			// Render at higher resolution for crisp text
+			const highResViewport = page.getViewport({ scale: this.scale * dpr });
+			
 			await page.render({
 				canvasContext: ctx,
-				viewport: viewport,
+				viewport: highResViewport,
 			}).promise;
 
-			console.log(`Marginalia: Page ${pageNum} PDF rendered`);
+			console.log(`Marginalia: Page ${pageNum} PDF rendered at ${dpr}x resolution`);
 
-			// Create drawing canvas for this page
+			// Create drawing canvas for this page (use display dimensions)
 			pageElement.drawingCanvas = new DrawingCanvas(
 				pageElement.wrapper,
-				viewport.width,
-				viewport.height
+				displayWidth,
+				displayHeight,
+				dpr  // Pass DPR for high-res drawing
 			);
 			
 			// Apply current tool and color
