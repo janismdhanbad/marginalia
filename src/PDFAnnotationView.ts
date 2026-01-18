@@ -4,7 +4,7 @@ import type PDFAnnotatorPlugin from './main';
 import { DrawingCanvas, Tool, Stroke, AnnotationData } from './DrawingCanvas';
 
 export const VIEW_TYPE_PDF_ANNOTATION = 'pdf-annotation-view';
-export const PLUGIN_VERSION = 'v0.3.0';  // Continuous scroll update
+export const PLUGIN_VERSION = 'v0.3.2';  // Fix page dimensions
 
 // Check if we're on mobile/tablet
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -319,22 +319,47 @@ export class PDFAnnotationView extends ItemView {
 
 		this.pageElements = [];
 		
+		// Get first page to estimate dimensions (most PDFs have uniform page sizes)
+		const firstPage = await this.pdfDoc.getPage(1);
+		const defaultViewport = firstPage.getViewport({ scale: this.scale });
+		
+		// Ensure we have valid dimensions
+		const defaultWidth = Math.max(defaultViewport.width, 400);
+		const defaultHeight = Math.max(defaultViewport.height, 500);
+		
+		console.log(`Marginalia: First page viewport raw: ${defaultViewport.width}x${defaultViewport.height}`);
+		console.log(`Marginalia: Creating ${this.totalPages} page placeholders (${defaultWidth}x${defaultHeight})`);
+		
 		for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
-			const page = await this.pdfDoc.getPage(pageNum);
-			const viewport = page.getViewport({ scale: this.scale });
-			
-			// Create page wrapper
+			// Create page wrapper with default size (will adjust when rendered)
 			const wrapper = this.pagesContainerEl.createDiv({ 
 				cls: 'pdf-page-wrapper',
 				attr: { 'data-page': pageNum.toString() }
 			});
-			wrapper.style.width = `${viewport.width}px`;
-			wrapper.style.height = `${viewport.height}px`;
+			// Set dimensions explicitly
+			wrapper.style.width = `${Math.floor(defaultWidth)}px`;
+			wrapper.style.height = `${Math.floor(defaultHeight)}px`;
+			wrapper.style.minWidth = `${Math.floor(defaultWidth)}px`;
+			wrapper.style.minHeight = `${Math.floor(defaultHeight)}px`;
 			
-			// Create PDF canvas
+			// Create PDF canvas with explicit dimensions
 			const pdfCanvas = wrapper.createEl('canvas', { cls: 'pdf-page-canvas' });
-			pdfCanvas.width = viewport.width;
-			pdfCanvas.height = viewport.height;
+			pdfCanvas.width = Math.floor(defaultWidth);
+			pdfCanvas.height = Math.floor(defaultHeight);
+			pdfCanvas.style.width = `${Math.floor(defaultWidth)}px`;
+			pdfCanvas.style.height = `${Math.floor(defaultHeight)}px`;
+			
+			// Fill with light gray placeholder
+			const ctx = pdfCanvas.getContext('2d');
+			if (ctx) {
+				ctx.fillStyle = '#f0f0f0';
+				ctx.fillRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+				ctx.fillStyle = '#888';
+				ctx.font = '24px sans-serif';
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.fillText(`Loading Page ${pageNum}...`, pdfCanvas.width / 2, pdfCanvas.height / 2);
+			}
 			
 			// Page number label
 			const pageLabel = wrapper.createDiv({ cls: 'pdf-page-label' });
@@ -355,18 +380,33 @@ export class PDFAnnotationView extends ItemView {
 				this.pageObserver.observe(wrapper);
 			}
 		}
+		
+		console.log('Marginalia: Page placeholders created');
 	}
 
 	private async renderPageIfNeeded(pageNum: number) {
 		const pageElement = this.pageElements[pageNum - 1];
-		if (!pageElement || pageElement.rendered || !this.pdfDoc) return;
+		if (!pageElement || pageElement.rendered || !this.pdfDoc) {
+			return;
+		}
+
+		console.log(`Marginalia: Rendering page ${pageNum}`);
 
 		try {
 			const page = await this.pdfDoc.getPage(pageNum);
 			const viewport = page.getViewport({ scale: this.scale });
 
+			// Update wrapper and canvas size if different from placeholder
+			pageElement.wrapper.style.width = `${viewport.width}px`;
+			pageElement.wrapper.style.height = `${viewport.height}px`;
+			pageElement.pdfCanvas.width = viewport.width;
+			pageElement.pdfCanvas.height = viewport.height;
+
 			const ctx = pageElement.pdfCanvas.getContext('2d');
-			if (!ctx) return;
+			if (!ctx) {
+				console.error(`Marginalia: Could not get context for page ${pageNum}`);
+				return;
+			}
 
 			// Fill with white background
 			ctx.fillStyle = 'white';
@@ -376,6 +416,8 @@ export class PDFAnnotationView extends ItemView {
 				canvasContext: ctx,
 				viewport: viewport,
 			}).promise;
+
+			console.log(`Marginalia: Page ${pageNum} PDF rendered`);
 
 			// Create drawing canvas for this page
 			pageElement.drawingCanvas = new DrawingCanvas(
@@ -392,11 +434,13 @@ export class PDFAnnotationView extends ItemView {
 			const strokes = this.pageAnnotations[pageNum];
 			if (strokes && strokes.length > 0) {
 				pageElement.drawingCanvas.loadStrokes(strokes);
+				console.log(`Marginalia: Loaded ${strokes.length} strokes for page ${pageNum}`);
 			}
 
 			pageElement.rendered = true;
+			console.log(`Marginalia: Page ${pageNum} fully rendered`);
 		} catch (error) {
-			console.error(`Error rendering page ${pageNum}:`, error);
+			console.error(`Marginalia: Error rendering page ${pageNum}:`, error);
 		}
 	}
 

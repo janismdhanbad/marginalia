@@ -154,7 +154,9 @@
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 	background: white;
 	border-radius: 4px;
-	overflow: hidden;
+	overflow: visible;
+	min-height: 400px;
+	flex-shrink: 0;
 }
 
 /* PDF Canvas for each page */
