@@ -28,8 +28,14 @@ export class DrawingCanvas {
 	private currentTool: Tool = 'pen';
 	private currentColor: string = '#000000';
 	
-	// Canvas snapshot for highlighter (to avoid opacity stacking)
-	private canvasSnapshot: ImageData | null = null;
+	// Offscreen canvas for highlighter (to avoid opacity stacking without expensive snapshot)
+	private highlightCanvas: HTMLCanvasElement | null = null;
+	private highlightCtx: CanvasRenderingContext2D | null = null;
+	// Background snapshot for fast compositing
+	private backgroundSnapshot: ImageData | null = null;
+	// RAF throttling for highlighter
+	private highlightRAF: number | null = null;
+	private needsHighlightUpdate: boolean = false;
 	
 	// Drawing settings
 	private readonly PEN_MIN_WIDTH = 1;
@@ -135,9 +141,19 @@ export class DrawingCanvas {
 		this.isDrawing = true;
 		this.canvas.setPointerCapture(e.pointerId);
 		
-		// Save canvas snapshot for highlighter to avoid opacity stacking
+		// Create offscreen canvas for highlighter to avoid opacity stacking
 		if (this.currentTool === 'highlighter') {
-			this.canvasSnapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+			// Save background once at start (fast)
+			this.backgroundSnapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+			
+			this.highlightCanvas = document.createElement('canvas');
+			this.highlightCanvas.width = this.canvas.width;
+			this.highlightCanvas.height = this.canvas.height;
+			this.highlightCtx = this.highlightCanvas.getContext('2d');
+			if (this.highlightCtx) {
+				this.highlightCtx.lineCap = 'round';
+				this.highlightCtx.lineJoin = 'round';
+			}
 		}
 		
 		const point = this.getPointFromEvent(e);
@@ -171,10 +187,10 @@ export class DrawingCanvas {
 			this.currentStroke.points.push(point);
 		}
 		
-		// For highlighter, redraw entire stroke to avoid opacity stacking
+		// For highlighter, use offscreen canvas approach
 		// For other tools, draw incrementally for better performance
 		if (this.currentTool === 'highlighter') {
-			this.redrawCurrentStroke();
+			this.drawHighlighterSegment();
 		} else {
 			this.drawSegment(this.currentStroke.points[this.currentStroke.points.length - 1]);
 		}
@@ -185,13 +201,27 @@ export class DrawingCanvas {
 		
 		this.isDrawing = false;
 		
+		// Final composite for highlighter
+		if (this.highlightCanvas && this.backgroundSnapshot) {
+			this.compositeHighlightCanvas();
+		}
+		
+		// Cancel any pending RAF
+		if (this.highlightRAF) {
+			cancelAnimationFrame(this.highlightRAF);
+			this.highlightRAF = null;
+		}
+		
 		if (this.currentStroke && this.currentStroke.points.length > 0) {
 			// Save the stroke
 			this.strokes.push(this.currentStroke);
 		}
 		
 		this.currentStroke = null;
-		this.canvasSnapshot = null;  // Clear snapshot
+		this.highlightCanvas = null;  // Clear offscreen canvas
+		this.highlightCtx = null;
+		this.backgroundSnapshot = null;  // Clear snapshot
+		this.needsHighlightUpdate = false;
 		this.canvas.releasePointerCapture(e.pointerId);
 	}
 
@@ -290,40 +320,51 @@ export class DrawingCanvas {
 		}
 	}
 
-	// Redraw current stroke from scratch (for highlighter to avoid opacity stacking)
-	private redrawCurrentStroke() {
-		if (!this.currentStroke || this.currentStroke.points.length < 1) return;
-		
-		// Restore the canvas to state before this stroke started
-		if (this.canvasSnapshot) {
-			this.ctx.putImageData(this.canvasSnapshot, 0, 0);
-		}
-		
-		// Setup context for highlighter
-		this.setupContextForTool();
+	// Draw highlighter stroke incrementally to offscreen canvas (fast, no opacity stacking)
+	private drawHighlighterSegment() {
+		if (!this.currentStroke || !this.highlightCtx || this.currentStroke.points.length < 2) return;
 		
 		const points = this.currentStroke.points;
 		
-		// Draw the entire stroke as one continuous path
-		this.ctx.beginPath();
-		this.ctx.lineWidth = this.HIGHLIGHTER_WIDTH;
-		this.ctx.moveTo(points[0].x, points[0].y);
+		// Draw all new segments to offscreen canvas
+		this.highlightCtx.strokeStyle = this.currentColor;
+		this.highlightCtx.lineWidth = this.HIGHLIGHTER_WIDTH;
+		this.highlightCtx.globalAlpha = 1;  // Draw opaque to offscreen
 		
-		for (let i = 1; i < points.length; i++) {
-			const point = points[i];
-			const prev = points[i - 1];
-			
-			// Use quadratic curves for smoothness
-			if (i >= 2) {
-				const midX = (prev.x + point.x) / 2;
-				const midY = (prev.y + point.y) / 2;
-				this.ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
-			} else {
-				this.ctx.lineTo(point.x, point.y);
-			}
+		// Draw the latest segment
+		const point = points[points.length - 1];
+		const prevPoint = points[points.length - 2];
+		
+		this.highlightCtx.beginPath();
+		this.highlightCtx.moveTo(prevPoint.x, prevPoint.y);
+		this.highlightCtx.lineTo(point.x, point.y);
+		this.highlightCtx.stroke();
+		
+		// Throttle compositing to animation frame rate for performance
+		this.needsHighlightUpdate = true;
+		if (!this.highlightRAF) {
+			this.highlightRAF = requestAnimationFrame(() => {
+				if (this.needsHighlightUpdate) {
+					this.compositeHighlightCanvas();
+					this.needsHighlightUpdate = false;
+				}
+				this.highlightRAF = null;
+			});
 		}
+	}
+	
+	// Composite the highlight canvas onto main canvas (fast - uses saved snapshot)
+	private compositeHighlightCanvas() {
+		if (!this.highlightCanvas || !this.backgroundSnapshot) return;
 		
-		this.ctx.stroke();
+		// Restore background snapshot (fast)
+		this.ctx.putImageData(this.backgroundSnapshot, 0, 0);
+		
+		// Then composite the current highlight with transparency
+		this.ctx.save();
+		this.ctx.globalAlpha = 0.3;
+		this.ctx.drawImage(this.highlightCanvas, 0, 0);
+		this.ctx.restore();
 	}
 
 	// Redraw all strokes (used after resize or clear)

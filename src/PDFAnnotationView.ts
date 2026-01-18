@@ -4,7 +4,7 @@ import type PDFAnnotatorPlugin from './main';
 import { DrawingCanvas, Tool } from './DrawingCanvas';
 
 export const VIEW_TYPE_PDF_ANNOTATION = 'pdf-annotation-view';
-export const PLUGIN_VERSION = 'v0.1.9';  // Increment this when updating
+export const PLUGIN_VERSION = 'v0.2.0';  // Increment this when updating
 
 // Check if we're on mobile/tablet
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
