@@ -242,7 +242,15 @@ export class DrawingCanvas {
 		
 		this.ctx.beginPath();
 		this.ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-		this.ctx.fillStyle = this.currentTool === 'eraser' ? 'rgba(0,0,0,1)' : this.currentColor;
+		
+		// Use appropriate fill color based on tool
+		if (this.currentTool === 'eraser') {
+			this.ctx.fillStyle = 'rgba(0,0,0,1)';
+		} else if (this.currentTool === 'highlighter') {
+			this.ctx.fillStyle = this.hexToRgba(this.currentColor, 0.3);
+		} else {
+			this.ctx.fillStyle = this.currentColor;
+		}
 		this.ctx.fill();
 	}
 
