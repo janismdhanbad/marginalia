@@ -28,6 +28,9 @@ export class DrawingCanvas {
 	private currentTool: Tool = 'pen';
 	private currentColor: string = '#000000';
 	
+	// Canvas snapshot for highlighter (to avoid opacity stacking)
+	private canvasSnapshot: ImageData | null = null;
+	
 	// Drawing settings
 	private readonly PEN_MIN_WIDTH = 1;
 	private readonly PEN_MAX_WIDTH = 4;
@@ -132,6 +135,11 @@ export class DrawingCanvas {
 		this.isDrawing = true;
 		this.canvas.setPointerCapture(e.pointerId);
 		
+		// Save canvas snapshot for highlighter to avoid opacity stacking
+		if (this.currentTool === 'highlighter') {
+			this.canvasSnapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+		}
+		
 		const point = this.getPointFromEvent(e);
 		
 		this.currentStroke = {
@@ -146,8 +154,10 @@ export class DrawingCanvas {
 		this.setupContextForTool();
 		this.ctx.moveTo(point.x, point.y);
 		
-		// Draw a dot for single taps
-		this.drawPoint(point);
+		// Draw a dot for single taps (skip for highlighter - will be drawn in redrawCurrentStroke)
+		if (this.currentTool !== 'highlighter') {
+			this.drawPoint(point);
+		}
 	}
 
 	private handlePointerMove(e: PointerEvent) {
@@ -159,9 +169,14 @@ export class DrawingCanvas {
 		for (const event of events) {
 			const point = this.getPointFromEvent(event);
 			this.currentStroke.points.push(point);
-			
-			// Draw the segment
-			this.drawSegment(point);
+		}
+		
+		// For highlighter, redraw entire stroke to avoid opacity stacking
+		// For other tools, draw incrementally for better performance
+		if (this.currentTool === 'highlighter') {
+			this.redrawCurrentStroke();
+		} else {
+			this.drawSegment(this.currentStroke.points[this.currentStroke.points.length - 1]);
 		}
 	}
 
@@ -176,6 +191,7 @@ export class DrawingCanvas {
 		}
 		
 		this.currentStroke = null;
+		this.canvasSnapshot = null;  // Clear snapshot
 		this.canvas.releasePointerCapture(e.pointerId);
 	}
 
@@ -213,44 +229,34 @@ export class DrawingCanvas {
 			case 'pen':
 				this.ctx.globalCompositeOperation = 'source-over';
 				this.ctx.strokeStyle = this.currentColor;
+				this.ctx.fillStyle = this.currentColor;
 				this.ctx.globalAlpha = 1;
 				break;
 			case 'highlighter':
-				// Use source-over with transparency for proper highlighting
+				// Use globalAlpha for transparency - more reliable than rgba
 				this.ctx.globalCompositeOperation = 'source-over';
-				// Convert color to RGBA with 30% opacity for transparency
-				this.ctx.strokeStyle = this.hexToRgba(this.currentColor, 0.3);
-				this.ctx.globalAlpha = 1;
+				this.ctx.strokeStyle = this.currentColor;
+				this.ctx.fillStyle = this.currentColor;
+				this.ctx.globalAlpha = 0.3;  // 30% opacity for see-through highlight
 				break;
 			case 'eraser':
 				this.ctx.globalCompositeOperation = 'destination-out';
 				this.ctx.strokeStyle = 'rgba(0,0,0,1)';
+				this.ctx.fillStyle = 'rgba(0,0,0,1)';
 				this.ctx.globalAlpha = 1;
 				break;
+			case 'hand':
+				// Hand tool doesn't draw
+				break;
 		}
-	}
-
-	private hexToRgba(hex: string, alpha: number): string {
-		const r = parseInt(hex.slice(1, 3), 16);
-		const g = parseInt(hex.slice(3, 5), 16);
-		const b = parseInt(hex.slice(5, 7), 16);
-		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 	}
 
 	private drawPoint(point: Point) {
 		const radius = this.getLineWidth(point.pressure) / 2;
 		
+		// setupContextForTool already sets fillStyle and globalAlpha correctly
 		this.ctx.beginPath();
 		this.ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-		
-		// Use appropriate fill color based on tool
-		if (this.currentTool === 'eraser') {
-			this.ctx.fillStyle = 'rgba(0,0,0,1)';
-		} else if (this.currentTool === 'highlighter') {
-			this.ctx.fillStyle = this.hexToRgba(this.currentColor, 0.3);
-		} else {
-			this.ctx.fillStyle = this.currentColor;
-		}
 		this.ctx.fill();
 	}
 
@@ -282,6 +288,42 @@ export class DrawingCanvas {
 			this.ctx.lineTo(point.x, point.y);
 			this.ctx.stroke();
 		}
+	}
+
+	// Redraw current stroke from scratch (for highlighter to avoid opacity stacking)
+	private redrawCurrentStroke() {
+		if (!this.currentStroke || this.currentStroke.points.length < 1) return;
+		
+		// Restore the canvas to state before this stroke started
+		if (this.canvasSnapshot) {
+			this.ctx.putImageData(this.canvasSnapshot, 0, 0);
+		}
+		
+		// Setup context for highlighter
+		this.setupContextForTool();
+		
+		const points = this.currentStroke.points;
+		
+		// Draw the entire stroke as one continuous path
+		this.ctx.beginPath();
+		this.ctx.lineWidth = this.HIGHLIGHTER_WIDTH;
+		this.ctx.moveTo(points[0].x, points[0].y);
+		
+		for (let i = 1; i < points.length; i++) {
+			const point = points[i];
+			const prev = points[i - 1];
+			
+			// Use quadratic curves for smoothness
+			if (i >= 2) {
+				const midX = (prev.x + point.x) / 2;
+				const midY = (prev.y + point.y) / 2;
+				this.ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+			} else {
+				this.ctx.lineTo(point.x, point.y);
+			}
+		}
+		
+		this.ctx.stroke();
 	}
 
 	// Redraw all strokes (used after resize or clear)
