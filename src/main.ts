@@ -63,8 +63,8 @@ export default class PDFAnnotatorPlugin extends Plugin {
 			// View already exists, use it
 			leaf = leaves[0];
 		} else {
-			// Create new leaf in the right split
-			leaf = workspace.getRightLeaf(false);
+			// Create new leaf in the main area (full page, not sidebar)
+			leaf = workspace.getLeaf('tab');
 			if (leaf) {
 				await leaf.setViewState({
 					type: VIEW_TYPE_PDF_ANNOTATION,

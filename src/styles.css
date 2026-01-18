@@ -129,35 +129,61 @@
 	color: white;
 }
 
-/* PDF Container */
+/* PDF Container - scrollable */
 .pdf-annotator-pdf-container {
 	flex: 1;
 	overflow: auto;
 	display: flex;
 	justify-content: center;
-	align-items: flex-start;
 	padding: 20px;
 	background: var(--background-primary-alt);
-	position: relative;
 }
 
-/* PDF Canvas */
-.pdf-annotator-pdf-canvas {
+/* Pages container - holds all pages stacked vertically */
+.pdf-pages-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 20px;
+	padding-bottom: 40px;
+}
+
+/* Individual page wrapper */
+.pdf-page-wrapper {
+	position: relative;
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 	background: white;
 	border-radius: 4px;
+	overflow: hidden;
 }
 
-/* Drawing Canvas - overlays the PDF */
+/* PDF Canvas for each page */
+.pdf-page-canvas {
+	display: block;
+	background: white;
+}
+
+/* Drawing Canvas - overlays each PDF page */
 .pdf-annotator-drawing-canvas {
 	position: absolute;
-	top: 20px;
-	left: 50%;
-	transform: translateX(-50%);
+	top: 0;
+	left: 0;
 	cursor: crosshair;
 	touch-action: none;
-	/* Prevent canvas from capturing scroll events */
 	pointer-events: auto;
+}
+
+/* Page number label */
+.pdf-page-label {
+	position: absolute;
+	bottom: 8px;
+	right: 8px;
+	background: rgba(0, 0, 0, 0.6);
+	color: white;
+	padding: 4px 8px;
+	border-radius: 4px;
+	font-size: 11px;
+	pointer-events: none;
 }
 
 /* Welcome Message */

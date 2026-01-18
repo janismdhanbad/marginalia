@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
 
-# Build output (these go in GitHub Releases, not the repo)
 main.js
 main.css
 main.js.map
