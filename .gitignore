@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output (these go in GitHub Releases, not the repo)
+main.js
+main.css
+main.js.map
+*.js.map
+pdf.worker.mjs
+
+# IDE
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Obsidian
+data.json

@@ -1,0 +1,340 @@
+/* PDF Annotator Plugin Styles */
+
+/* Main Container */
+.pdf-annotator-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background: var(--background-primary);
+	overflow: hidden;
+}
+
+/* Toolbar */
+.pdf-annotator-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 8px 12px;
+	background: var(--background-secondary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	align-items: center;
+}
+
+.toolbar-group {
+	display: flex;
+	gap: 4px;
+	align-items: center;
+}
+
+.toolbar-group:not(:last-child)::after {
+	content: '';
+	width: 1px;
+	height: 24px;
+	background: var(--background-modifier-border);
+	margin-left: 8px;
+}
+
+.toolbar-btn {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 10px;
+	border: none;
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+	font-size: 13px;
+	transition: all 0.15s ease;
+}
+
+.toolbar-btn:hover {
+	background: var(--background-modifier-hover);
+}
+
+.toolbar-btn:active {
+	transform: scale(0.97);
+}
+
+.toolbar-btn.active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+/* Navigation buttons */
+.nav-btn {
+	padding: 6px 12px;
+	font-weight: bold;
+}
+
+.page-indicator {
+	padding: 0 8px;
+	font-size: 13px;
+	color: var(--text-muted);
+	min-width: 60px;
+	text-align: center;
+}
+
+/* Tool buttons */
+.tool-btn {
+	min-width: 80px;
+	justify-content: center;
+}
+
+/* Color buttons */
+.color-btn {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border-radius: 50%;
+	border: 2px solid transparent;
+	position: relative;
+}
+
+.color-btn:hover {
+	transform: scale(1.1);
+}
+
+.color-btn.active {
+	border-color: var(--text-normal);
+	box-shadow: 0 0 0 2px var(--background-primary);
+}
+
+/* Color button for light colors needs a border */
+.color-btn[data-color="#f1c40f"] {
+	border: 2px solid var(--background-modifier-border);
+}
+
+.color-btn[data-color="#f1c40f"].active {
+	border-color: var(--text-normal);
+}
+
+/* Danger button (clear) */
+.danger-btn {
+	color: var(--text-error);
+}
+
+.danger-btn:hover {
+	background: var(--background-modifier-error);
+	color: white;
+}
+
+/* PDF Container */
+.pdf-annotator-pdf-container {
+	flex: 1;
+	overflow: auto;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	padding: 20px;
+	background: var(--background-primary-alt);
+	position: relative;
+}
+
+/* PDF Canvas */
+.pdf-annotator-pdf-canvas {
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+	background: white;
+	border-radius: 4px;
+}
+
+/* Drawing Canvas - overlays the PDF */
+.pdf-annotator-drawing-canvas {
+	position: absolute;
+	top: 20px;
+	left: 50%;
+	transform: translateX(-50%);
+	cursor: crosshair;
+	touch-action: none;
+	/* Prevent canvas from capturing scroll events */
+	pointer-events: auto;
+}
+
+/* Welcome Message */
+.welcome-message {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	width: 100%;
+}
+
+.welcome-content {
+	text-align: center;
+	padding: 40px;
+	max-width: 400px;
+}
+
+.welcome-content h2 {
+	font-size: 28px;
+	margin-bottom: 8px;
+	color: var(--text-normal);
+}
+
+.welcome-content .tagline {
+	font-size: 16px;
+	color: var(--text-accent);
+	margin-bottom: 20px;
+}
+
+.welcome-content p {
+	color: var(--text-muted);
+	margin-bottom: 12px;
+	line-height: 1.6;
+}
+
+.welcome-content .hint {
+	font-size: 13px;
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.welcome-content .features {
+	display: flex;
+	gap: 16px;
+	justify-content: center;
+	margin-top: 24px;
+	flex-wrap: wrap;
+}
+
+.welcome-content .features span {
+	padding: 8px 16px;
+	background: var(--background-secondary);
+	border-radius: 20px;
+	font-size: 14px;
+	color: var(--text-normal);
+}
+
+.welcome-content .version {
+	margin-top: 24px;
+	font-size: 11px;
+	color: var(--text-faint);
+	font-family: monospace;
+}
+
+/* PDF Picker Modal */
+.pdf-picker-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.pdf-picker-backdrop {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.pdf-picker-content {
+	position: relative;
+	background: var(--background-primary);
+	border-radius: 12px;
+	padding: 20px;
+	max-width: 500px;
+	width: 90%;
+	max-height: 70vh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.pdf-picker-content h3 {
+	margin: 0 0 16px 0;
+	font-size: 18px;
+	color: var(--text-normal);
+}
+
+.pdf-picker-list {
+	flex: 1;
+	overflow-y: auto;
+	margin-bottom: 16px;
+}
+
+.pdf-picker-item {
+	padding: 12px 16px;
+	border-radius: 6px;
+	cursor: pointer;
+	color: var(--text-normal);
+	font-size: 14px;
+	transition: background 0.15s ease;
+}
+
+.pdf-picker-item:hover {
+	background: var(--background-secondary);
+}
+
+.pdf-picker-item:active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.pdf-picker-close {
+	padding: 10px 20px;
+	border: none;
+	border-radius: 6px;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	cursor: pointer;
+	font-size: 14px;
+	transition: background 0.15s ease;
+}
+
+.pdf-picker-close:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Mobile / Touch Optimizations */
+@media (pointer: coarse) {
+	.toolbar-btn {
+		padding: 10px 14px;
+		font-size: 14px;
+	}
+	
+	.color-btn {
+		width: 36px;
+		height: 36px;
+	}
+	
+	.pdf-annotator-toolbar {
+		padding: 12px 16px;
+		gap: 12px;
+	}
+}
+
+/* Dark theme adjustments */
+.theme-dark .pdf-annotator-pdf-canvas {
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Ensure canvas is responsive */
+.pdf-annotator-pdf-container {
+	min-height: 0;
+}
+
+/* Scrollbar styling */
+.pdf-annotator-pdf-container::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.pdf-annotator-pdf-container::-webkit-scrollbar-track {
+	background: var(--background-secondary);
+}
+
+.pdf-annotator-pdf-container::-webkit-scrollbar-thumb {
+	background: var(--background-modifier-border);
+	border-radius: 4px;
+}
+
+.pdf-annotator-pdf-container::-webkit-scrollbar-thumb:hover {
+	background: var(--text-faint);
+}
