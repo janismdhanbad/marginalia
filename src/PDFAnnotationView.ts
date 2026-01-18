@@ -1,10 +1,10 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice } from 'obsidian';
 import * as pdfjsLib from 'pdfjs-dist';
 import type PDFAnnotatorPlugin from './main';
-import { DrawingCanvas, Tool } from './DrawingCanvas';
+import { DrawingCanvas, Tool, Stroke, AnnotationData } from './DrawingCanvas';
 
 export const VIEW_TYPE_PDF_ANNOTATION = 'pdf-annotation-view';
-export const PLUGIN_VERSION = 'v0.2.0';  // Increment this when updating
+export const PLUGIN_VERSION = 'v0.2.1';  // Increment this when updating
 
 // Check if we're on mobile/tablet
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -28,6 +28,10 @@ export class PDFAnnotationView extends ItemView {
 	private totalPages: number = 0;
 	private scale: number = 1.5;
 	private currentFile: TFile | null = null;
+	
+	// Annotation storage per page
+	private pageAnnotations: { [pageNum: number]: Stroke[] } = {};
+	private hasUnsavedChanges: boolean = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: PDFAnnotatorPlugin) {
 		super(leaf);
@@ -151,8 +155,15 @@ export class PDFAnnotationView extends ItemView {
 			colorBtn.addEventListener('click', () => this.selectColor(color.value, colorBtn));
 		});
 
-		// Clear button
+		// Save and Clear buttons
 		const actionGroup = this.toolbarEl.createDiv({ cls: 'toolbar-group' });
+		
+		const saveBtn = actionGroup.createEl('button', {
+			cls: 'toolbar-btn save-btn',
+			attr: { 'aria-label': 'Save Annotations' }
+		});
+		saveBtn.innerHTML = '💾 Save';
+		saveBtn.addEventListener('click', () => this.saveAnnotations());
 		
 		const clearBtn = actionGroup.createEl('button', {
 			cls: 'toolbar-btn danger-btn',
@@ -273,6 +284,9 @@ export class PDFAnnotationView extends ItemView {
 			// Render the first page
 			await this.renderPage(this.currentPage);
 			
+			// Load saved annotations
+			await this.loadAnnotations();
+			
 			new Notice(`Loaded: ${file.name} (${this.totalPages} pages)`);
 		} catch (error) {
 			console.error('Marginalia - Error loading PDF:', error);
@@ -348,8 +362,14 @@ export class PDFAnnotationView extends ItemView {
 			return;
 		}
 
+		// Save annotations from current page before switching
+		this.saveCurrentPageAnnotations();
+
 		this.currentPage = pageNum;
 		await this.renderPage(pageNum);
+		
+		// Load annotations for new page
+		this.loadCurrentPageAnnotations();
 	}
 
 	private selectTool(tool: Tool, btn: HTMLElement) {
@@ -377,16 +397,130 @@ export class PDFAnnotationView extends ItemView {
 	private clearAnnotations() {
 		if (this.drawingCanvas) {
 			this.drawingCanvas.clear();
+			this.hasUnsavedChanges = true;
 			new Notice('Annotations cleared');
 		}
 	}
 
+	// Save current page annotations before switching pages
+	private saveCurrentPageAnnotations() {
+		if (this.drawingCanvas && this.currentFile) {
+			const strokes = this.drawingCanvas.getStrokes();
+			if (strokes.length > 0) {
+				this.pageAnnotations[this.currentPage] = strokes;
+				this.hasUnsavedChanges = true;
+			} else if (this.pageAnnotations[this.currentPage]) {
+				// Page was cleared
+				delete this.pageAnnotations[this.currentPage];
+				this.hasUnsavedChanges = true;
+			}
+		}
+	}
+
+	// Load annotations for current page
+	private loadCurrentPageAnnotations() {
+		if (this.drawingCanvas && this.currentFile) {
+			const strokes = this.pageAnnotations[this.currentPage];
+			if (strokes && strokes.length > 0) {
+				this.drawingCanvas.loadStrokes(strokes);
+			}
+		}
+	}
+
+	// Save all annotations to file
+	private async saveAnnotations() {
+		if (!this.currentFile) {
+			new Notice('No PDF loaded');
+			return;
+		}
+
+		// Save current page first
+		this.saveCurrentPageAnnotations();
+
+		// Check if there are any annotations
+		const hasAnnotations = Object.keys(this.pageAnnotations).length > 0;
+		
+		const annotationData: AnnotationData = {
+			version: PLUGIN_VERSION,
+			pdfPath: this.currentFile.path,
+			pageAnnotations: this.pageAnnotations
+		};
+
+		// Create annotation file path (e.g., "Papers/doc.pdf" -> "Papers/doc.pdf.annotations.json")
+		const annotationPath = this.currentFile.path + '.annotations.json';
+
+		try {
+			if (hasAnnotations) {
+				const jsonContent = JSON.stringify(annotationData, null, 2);
+				
+				// Check if file exists
+				const existingFile = this.app.vault.getAbstractFileByPath(annotationPath);
+				if (existingFile instanceof TFile) {
+					await this.app.vault.modify(existingFile, jsonContent);
+				} else {
+					await this.app.vault.create(annotationPath, jsonContent);
+				}
+				
+				this.hasUnsavedChanges = false;
+				new Notice(`Annotations saved to ${annotationPath}`);
+			} else {
+				// No annotations - delete file if it exists
+				const existingFile = this.app.vault.getAbstractFileByPath(annotationPath);
+				if (existingFile instanceof TFile) {
+					await this.app.vault.delete(existingFile);
+					new Notice('Annotations file removed (no annotations)');
+				} else {
+					new Notice('No annotations to save');
+				}
+			}
+		} catch (error) {
+			console.error('Error saving annotations:', error);
+			new Notice('Error saving annotations');
+		}
+	}
+
+	// Load annotations from file
+	private async loadAnnotations() {
+		if (!this.currentFile) return;
+
+		const annotationPath = this.currentFile.path + '.annotations.json';
+		
+		try {
+			const existingFile = this.app.vault.getAbstractFileByPath(annotationPath);
+			if (existingFile instanceof TFile) {
+				const content = await this.app.vault.read(existingFile);
+				const data: AnnotationData = JSON.parse(content);
+				
+				// Load page annotations
+				this.pageAnnotations = data.pageAnnotations || {};
+				
+				// Load current page
+				this.loadCurrentPageAnnotations();
+				
+				const pageCount = Object.keys(this.pageAnnotations).length;
+				new Notice(`Loaded annotations for ${pageCount} page(s)`);
+			}
+		} catch (error) {
+			// No annotation file or error - that's fine
+			console.log('No saved annotations found');
+		}
+	}
+
 	async onClose() {
+		// Save current page annotations
+		this.saveCurrentPageAnnotations();
+		
+		// Auto-save if there are unsaved changes
+		if (this.hasUnsavedChanges && this.currentFile) {
+			await this.saveAnnotations();
+		}
+		
 		// Cleanup
 		if (this.drawingCanvas) {
 			this.drawingCanvas.destroy();
 			this.drawingCanvas = null;
 		}
 		this.pdfDoc = null;
+		this.pageAnnotations = {};
 	}
 }

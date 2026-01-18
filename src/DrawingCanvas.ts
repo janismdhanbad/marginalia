@@ -1,6 +1,6 @@
 export type Tool = 'pen' | 'highlighter' | 'eraser' | 'hand';
 
-interface Point {
+export interface Point {
 	x: number;
 	y: number;
 	pressure: number;
@@ -9,11 +9,18 @@ interface Point {
 	timestamp: number;
 }
 
-interface Stroke {
+export interface Stroke {
 	points: Point[];
 	tool: Tool;
 	color: string;
 	lineWidth: number;
+}
+
+// Annotation data structure for saving/loading
+export interface AnnotationData {
+	version: string;
+	pdfPath: string;
+	pageAnnotations: { [pageNum: number]: Stroke[] };
 }
 
 export class DrawingCanvas {

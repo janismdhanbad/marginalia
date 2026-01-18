@@ -109,6 +109,16 @@
 	border-color: var(--text-normal);
 }
 
+/* Save button */
+.save-btn {
+	color: var(--text-success, #27ae60);
+}
+
+.save-btn:hover {
+	background: var(--background-modifier-success, #27ae60);
+	color: white;
+}
+
 /* Danger button (clear) */
 .danger-btn {
 	color: var(--text-error);
