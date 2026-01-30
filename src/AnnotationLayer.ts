@@ -351,8 +351,10 @@ export class AnnotationLayer {
 				break;
 			case 'highlighter':
 				this.ctx.globalCompositeOperation = 'source-over';
-				this.ctx.strokeStyle = this.currentColor;
-				this.ctx.globalAlpha = 0.4;  // 40% opacity (60% see-through)
+				// Convert hex color to RGBA with 40% opacity
+				const rgba = this.hexToRgba(this.currentColor, 0.4);
+				this.ctx.strokeStyle = rgba;
+				this.ctx.globalAlpha = 1;  // Set to 1, opacity is in the color
 				break;
 			case 'eraser':
 				this.ctx.globalCompositeOperation = 'destination-out';
@@ -362,6 +364,18 @@ export class AnnotationLayer {
 		}
 	}
 
+	private hexToRgba(hex: string, alpha: number): string {
+		// Remove # if present
+		hex = hex.replace('#', '');
+
+		// Parse RGB values
+		const r = parseInt(hex.substring(0, 2), 16);
+		const g = parseInt(hex.substring(2, 4), 16);
+		const b = parseInt(hex.substring(4, 6), 16);
+
+		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+	}
+
 	private redrawAllStrokes() {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -369,15 +383,15 @@ export class AnnotationLayer {
 			if (stroke.points.length === 0) continue;
 
 			// Set context properties for this stroke
-			// Use explicit alpha values instead of relying on setupContextForTool
 			if (stroke.tool === 'highlighter') {
 				this.ctx.globalCompositeOperation = 'source-over';
-				this.ctx.strokeStyle = stroke.color;
-				this.ctx.globalAlpha = 0.4;  // 40% opacity (60% see-through)
+				// Convert to RGBA with 40% opacity
+				this.ctx.strokeStyle = this.hexToRgba(stroke.color, 0.4);
+				this.ctx.globalAlpha = 1.0;  // Opacity is in the color
 			} else if (stroke.tool === 'pen') {
 				this.ctx.globalCompositeOperation = 'source-over';
 				this.ctx.strokeStyle = stroke.color;
-				this.ctx.globalAlpha = 1.0;  // Full opacity for pen
+				this.ctx.globalAlpha = 1.0;
 			} else if (stroke.tool === 'eraser') {
 				this.ctx.globalCompositeOperation = 'destination-out';
 				this.ctx.strokeStyle = 'rgba(0,0,0,1)';

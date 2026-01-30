@@ -1,7 +1,7 @@
 {
 	"id": "marginalia",
 	"name": "Marginalia",
-	"version": "0.6.3",
+	"version": "0.6.4",
 	"minAppVersion": "1.0.0",
 	"description": "Annotate PDFs directly in Obsidian's native viewer - draw, highlight, and scribble in the margins with Apple Pencil",
 	"author": "Your Name",
