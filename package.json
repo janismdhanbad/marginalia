@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-marginalia",
-	"version": "0.6.4",
+	"version": "0.6.5",
 	"description": "Marginalia - Annotate PDFs with Apple Pencil in Obsidian",
 	"main": "main.js",
 	"scripts": {

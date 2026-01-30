@@ -194,11 +194,15 @@ export class AnnotationLayer {
 
 		console.log(`AnnotationLayer: Canvas size: ${rect.width}x${rect.height}, DPR: ${dpr}`);
 
+		// Position canvas to match PDF container (fixed positioning)
+		this.canvas.style.left = `${rect.left}px`;
+		this.canvas.style.top = `${rect.top}px`;
+		this.canvas.style.width = `${rect.width}px`;
+		this.canvas.style.height = `${rect.height}px`;
+
 		// Set canvas size to match PDF container
 		this.canvas.width = rect.width * dpr;
 		this.canvas.height = rect.height * dpr;
-		this.canvas.style.width = `${rect.width}px`;
-		this.canvas.style.height = `${rect.height}px`;
 
 		// Reset context properties after canvas resize
 		this.ctx.lineCap = 'round';
@@ -254,12 +258,16 @@ export class AnnotationLayer {
 		this.resizeObserver.observe(pdfContentArea);
 		console.log('AnnotationLayer: ResizeObserver attached');
 
-		// Watch for scroll events (to sync annotations)
+		// Watch for scroll events to reposition canvas
 		this.scrollHandler = () => {
-			// Canvas position is handled by CSS
+			const rect = pdfContentArea.getBoundingClientRect();
+			this.canvas.style.left = `${rect.left}px`;
+			this.canvas.style.top = `${rect.top}px`;
 		};
 
-		// Attach scroll listener to the container
+		// Attach scroll listener to window for global scroll tracking
+		window.addEventListener('scroll', this.scrollHandler, true);
+		// Also listen to the container's own scroll
 		pdfContentArea.addEventListener('scroll', this.scrollHandler);
 		console.log('AnnotationLayer: Scroll handler attached');
 	}
@@ -353,8 +361,10 @@ export class AnnotationLayer {
 				this.ctx.globalCompositeOperation = 'source-over';
 				// Convert hex color to RGBA with 40% opacity
 				const rgba = this.hexToRgba(this.currentColor, 0.4);
+				console.log(`Highlighter color: ${this.currentColor} → ${rgba}`);
 				this.ctx.strokeStyle = rgba;
 				this.ctx.globalAlpha = 1;  // Set to 1, opacity is in the color
+				console.log(`Context strokeStyle: ${this.ctx.strokeStyle}, globalAlpha: ${this.ctx.globalAlpha}`);
 				break;
 			case 'eraser':
 				this.ctx.globalCompositeOperation = 'destination-out';
@@ -447,9 +457,21 @@ export class AnnotationLayer {
 			this.resizeObserver.disconnect();
 		}
 
-		const scrollContainer = this.pdfContainer.querySelector('.pdf-viewer');
-		if (scrollContainer && this.scrollHandler) {
-			scrollContainer.removeEventListener('scroll', this.scrollHandler);
+		// Remove scroll listeners
+		if (this.scrollHandler) {
+			window.removeEventListener('scroll', this.scrollHandler, true);
+
+			// Find and remove from PDF content area
+			let pdfContentArea = this.pdfContainer.querySelector('.pdf-container') as HTMLElement;
+			if (!pdfContentArea) {
+				pdfContentArea = this.pdfContainer.querySelector('.view-content') as HTMLElement;
+			}
+			if (!pdfContentArea) {
+				pdfContentArea = this.pdfContainer.querySelector('.workspace-leaf-content') as HTMLElement;
+			}
+			if (pdfContentArea) {
+				pdfContentArea.removeEventListener('scroll', this.scrollHandler);
+			}
 		}
 	}
 }
