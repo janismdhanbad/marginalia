@@ -328,19 +328,20 @@ export class PDFAnnotationView extends ItemView {
 	
 	private async fitToWidth() {
 		if (!this.pdfDoc) return;
-		
+
 		try {
 			// Get first page to calculate fit
 			const page = await this.pdfDoc.getPage(1);
-			const defaultViewport = page.getViewport({ scale: 1 });
-			
+			// Force rotation to 0 to get correct upright dimensions
+			const defaultViewport = page.getViewport({ scale: 1, rotation: 0 });
+
 			// Calculate scale to fit container width (with some padding)
 			const containerWidth = this.pdfContainerEl.clientWidth - 60; // 20px padding + scrollbar
 			this.scale = containerWidth / defaultViewport.width;
-			
+
 			// Clamp to min/max
 			this.scale = Math.max(this.MIN_SCALE, Math.min(this.MAX_SCALE, this.scale));
-			
+
 			this.updateZoomIndicator();
 			this.reRenderAllPages();
 		} catch (error) {
@@ -649,16 +650,18 @@ export class PDFAnnotationView extends ItemView {
 		if (!this.pdfDoc) return;
 
 		this.pageElements = [];
-		
+
 		// Get first page to estimate dimensions (most PDFs have uniform page sizes)
 		const firstPage = await this.pdfDoc.getPage(1);
-		const defaultViewport = firstPage.getViewport({ scale: this.scale });
-		
+		// Force rotation to 0 to get correct upright dimensions
+		const defaultViewport = firstPage.getViewport({ scale: this.scale, rotation: 0 });
+
 		// Ensure we have valid dimensions
 		const defaultWidth = Math.max(defaultViewport.width, 400);
 		const defaultHeight = Math.max(defaultViewport.height, 500);
-		
-		console.log(`Marginalia: First page viewport raw: ${defaultViewport.width}x${defaultViewport.height}`);
+
+		const firstPageRotation = firstPage.rotate || 0;
+		console.log(`Marginalia: First page viewport raw: ${defaultViewport.width}x${defaultViewport.height} (rotation: ${firstPageRotation}°)`);
 		console.log(`Marginalia: Creating ${this.totalPages} page placeholders (${defaultWidth}x${defaultHeight})`);
 		
 		for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
@@ -725,15 +728,21 @@ export class PDFAnnotationView extends ItemView {
 
 		try {
 			const page = await this.pdfDoc.getPage(pageNum);
-			
+
+			// Get the page's intrinsic rotation (0, 90, 180, or 270 degrees)
+			const rotation = page.rotate || 0;
+			console.log(`Marginalia: Page ${pageNum} has rotation: ${rotation}°`);
+
 			// Use devicePixelRatio for crisp rendering on high-DPI displays
 			const dpr = window.devicePixelRatio || 1;
-			const viewport = page.getViewport({ scale: this.scale });
-			
+
+			// Force rotation to 0 to get proper upright viewport
+			const viewport = page.getViewport({ scale: this.scale, rotation: 0 });
+
 			// CSS dimensions (display size)
 			const displayWidth = Math.floor(viewport.width);
 			const displayHeight = Math.floor(viewport.height);
-			
+
 			// Canvas dimensions (actual pixel resolution for crisp rendering)
 			const canvasWidth = Math.floor(viewport.width * dpr);
 			const canvasHeight = Math.floor(viewport.height * dpr);
@@ -741,7 +750,7 @@ export class PDFAnnotationView extends ItemView {
 			// Update wrapper size (CSS pixels)
 			pageElement.wrapper.style.width = `${displayWidth}px`;
 			pageElement.wrapper.style.height = `${displayHeight}px`;
-			
+
 			// Set canvas to high-resolution
 			pageElement.pdfCanvas.width = canvasWidth;
 			pageElement.pdfCanvas.height = canvasHeight;
@@ -758,15 +767,15 @@ export class PDFAnnotationView extends ItemView {
 			ctx.fillStyle = 'white';
 			ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-			// Render at higher resolution for crisp text
-			const highResViewport = page.getViewport({ scale: this.scale * dpr });
-			
+			// Render at higher resolution for crisp text, forcing rotation to 0
+			const highResViewport = page.getViewport({ scale: this.scale * dpr, rotation: 0 });
+
 			await page.render({
 				canvasContext: ctx,
 				viewport: highResViewport,
 			}).promise;
 
-			console.log(`Marginalia: Page ${pageNum} PDF rendered at ${dpr}x resolution`);
+			console.log(`Marginalia: Page ${pageNum} PDF rendered at ${dpr}x resolution (rotation corrected from ${rotation}° to 0°)`);
 
 			// Create drawing canvas for this page (use display dimensions)
 			pageElement.drawingCanvas = new DrawingCanvas(
