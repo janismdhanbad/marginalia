@@ -1,81 +1,106 @@
-import { Plugin, WorkspaceLeaf, addIcon } from 'obsidian';
-import { PDFAnnotationView, VIEW_TYPE_PDF_ANNOTATION } from './PDFAnnotationView';
-import './styles.css';
-
-// Custom pencil icon for the ribbon
-const PENCIL_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+import { Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import { AnnotationLayer } from './AnnotationLayer';
+import { AnnotationStorage } from './AnnotationStorage';
 
 export default class PDFAnnotatorPlugin extends Plugin {
+	private activeAnnotationLayers: Map<HTMLElement, AnnotationLayer> = new Map();
+	private storage: AnnotationStorage;
+
 	async onload() {
-		console.log('Loading Marginalia');
+		console.log('Loading Marginalia PDF Annotator');
 
-		// Register custom icon
-		addIcon('pdf-annotator', PENCIL_ICON);
+		this.storage = new AnnotationStorage(this.app);
 
-		// Register the custom view
-		this.registerView(
-			VIEW_TYPE_PDF_ANNOTATION,
-			(leaf) => new PDFAnnotationView(leaf, this)
+		// Hook into PDF views when they're opened
+		this.registerEvent(
+			this.app.workspace.on('layout-change', () => {
+				this.injectAnnotationLayers();
+			})
 		);
 
-		// Add ribbon icon
-		this.addRibbonIcon('pdf-annotator', 'Open Marginalia', () => {
-			this.activateView();
-		});
-
-		// Add command to open the annotation view
-		this.addCommand({
-			id: 'open-marginalia',
-			name: 'Open Marginalia',
-			callback: () => {
-				this.activateView();
-			}
-		});
-
-		// Add command to load a PDF file
-		this.addCommand({
-			id: 'load-pdf',
-			name: 'Load PDF in Marginalia',
-			callback: async () => {
-				await this.activateView();
-				// The view will handle file selection
-				const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATION)[0];
-				if (leaf && leaf.view instanceof PDFAnnotationView) {
-					leaf.view.promptLoadPDF();
+		// Also check when files are opened
+		this.registerEvent(
+			this.app.workspace.on('file-open', (file) => {
+				if (file?.extension === 'pdf') {
+					setTimeout(() => this.injectAnnotationLayers(), 100);
 				}
-			}
+			})
+		);
+
+		// Initial injection
+		this.app.workspace.onLayoutReady(() => {
+			setTimeout(() => this.injectAnnotationLayers(), 500);
 		});
+	}
+
+	private injectAnnotationLayers() {
+		// Find all PDF viewer elements in the workspace
+		const pdfViewers = document.querySelectorAll('.pdf-viewer');
+
+		pdfViewers.forEach((viewer) => {
+			const pdfContainer = viewer as HTMLElement;
+
+			// Skip if already injected
+			if (this.activeAnnotationLayers.has(pdfContainer)) {
+				return;
+			}
+
+			// Find the PDF canvas container
+			const canvasContainer = pdfContainer.querySelector('.pdf-container');
+			if (!canvasContainer) {
+				return;
+			}
+
+			// Get the file path from the view
+			const leaf = this.findLeafByContainer(pdfContainer);
+			if (!leaf) {
+				return;
+			}
+
+			const file = this.getFileFromLeaf(leaf);
+			if (!file || file.extension !== 'pdf') {
+				return;
+			}
+
+			console.log(`Marginalia: Injecting annotation layer for ${file.path}`);
+
+			// Create and inject annotation layer
+			const annotationLayer = new AnnotationLayer(
+				pdfContainer,
+				file,
+				this.storage
+			);
+
+			this.activeAnnotationLayers.set(pdfContainer, annotationLayer);
+		});
+	}
+
+	private findLeafByContainer(container: HTMLElement): WorkspaceLeaf | null {
+		const leaves = this.app.workspace.getLeavesOfType('pdf');
+
+		for (const leaf of leaves) {
+			const viewElement = (leaf.view as any).containerEl;
+			if (viewElement && viewElement.contains(container)) {
+				return leaf;
+			}
+		}
+
+		return null;
+	}
+
+	private getFileFromLeaf(leaf: WorkspaceLeaf): TFile | null {
+		const view = leaf.view as any;
+		return view.file || null;
 	}
 
 	onunload() {
-		console.log('Unloading Marginalia');
-		// Detach all leaves of our view type
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_PDF_ANNOTATION);
-	}
+		console.log('Unloading Marginalia PDF Annotator');
 
-	async activateView() {
-		const { workspace } = this.app;
+		// Cleanup all annotation layers
+		this.activeAnnotationLayers.forEach((layer) => {
+			layer.destroy();
+		});
 
-		let leaf: WorkspaceLeaf | null = null;
-		const leaves = workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATION);
-
-		if (leaves.length > 0) {
-			// View already exists, use it
-			leaf = leaves[0];
-		} else {
-			// Create new leaf in the main area (full page, not sidebar)
-			leaf = workspace.getLeaf('tab');
-			if (leaf) {
-				await leaf.setViewState({
-					type: VIEW_TYPE_PDF_ANNOTATION,
-					active: true,
-				});
-			}
-		}
-
-		// Reveal the leaf
-		if (leaf) {
-			workspace.revealLeaf(leaf);
-		}
+		this.activeAnnotationLayers.clear();
 	}
 }

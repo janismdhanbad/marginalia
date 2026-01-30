@@ -2,9 +2,9 @@
 
 *Write in the margins.*
 
-A PDF annotation plugin for [Obsidian](https://obsidian.md) with Apple Pencil support. Annotate research papers, highlight important passages, and take handwritten notes directly on your PDFs.
+A PDF annotation plugin for [Obsidian](https://obsidian.md) that **extends the native PDF viewer** with Apple Pencil support. Annotate research papers, highlight important passages, and take handwritten notes directly on your PDFs - all within Obsidian's built-in PDF reader.
 
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Desktop%20%7C%20iPad-lightgrey)
 
 ---
@@ -15,17 +15,17 @@ A PDF annotation plugin for [Obsidian](https://obsidian.md) with Apple Pencil su
 
 | Feature | Description |
 |---------|-------------|
-| **PDF Viewing** | Load and view PDFs from your vault |
-| **Continuous Scroll** | All pages stacked vertically, scroll naturally |
-| **Full Page Mode** | Opens as main tab, not sidebar |
+| **Native PDF Integration** | Works directly with Obsidian's built-in PDF viewer |
+| **Zero PDF Rendering Issues** | No rotation bugs - uses Obsidian's rendering |
+| **Seamless Experience** | Annotations appear right in the native viewer |
 | **Pen Tool** | Pressure-sensitive drawing with Apple Pencil |
 | **Highlighter** | Semi-transparent highlighting (30% opacity) |
 | **Eraser** | Remove annotations |
+| **Hand Tool** | Pan/scroll through PDF |
 | **Color Palette** | 6 preset colors (black, red, blue, green, yellow, purple) |
 | **Save/Load Annotations** | Annotations persist in JSON files |
-| **Auto-save** | Saves automatically when closing |
-| **Per-page Annotations** | Each page has independent annotations |
-| **Lazy Loading** | Pages render as you scroll (performance) |
+| **Floating Toolbar** | Unobtrusive tools overlay |
+| **Auto-resize** | Annotations sync with zoom/pan |
 
 ---
 
@@ -101,16 +101,13 @@ A PDF annotation plugin for [Obsidian](https://obsidian.md) with Apple Pencil su
 
 ## Usage
 
-### Opening the Annotator
+### Opening a PDF
 
-- Click the **✏️ pencil icon** in the left ribbon
-- Or use Command Palette: `Marginalia: Open Marginalia`
+Simply open any PDF file in Obsidian normally:
+- Click on a PDF file in your vault
+- Marginalia will automatically inject annotation tools into the native PDF viewer
 
-### Loading a PDF
-
-1. Click **📂 Load** in the toolbar
-2. Select a PDF from your vault
-3. Scroll through pages naturally
+No need for separate commands or views!
 
 ### Annotation Tools
 
@@ -133,6 +130,21 @@ A PDF annotation plugin for [Obsidian](https://obsidian.md) with Apple Pencil su
 
 ## Technical Details
 
+### Architecture
+
+Marginalia **extends Obsidian's native PDF viewer** rather than replacing it:
+
+1. **Hooks into workspace events** to detect PDF files being opened
+2. **Injects a canvas overlay** on top of Obsidian's PDF renderer
+3. **Syncs with Obsidian's zoom/pan/scroll** automatically
+4. **No PDF rendering** - leverages Obsidian's existing infrastructure
+
+This approach eliminates:
+- ❌ PDF rotation issues
+- ❌ Zoom/pan reimplementation
+- ❌ Performance overhead
+- ❌ Duplicate PDF rendering code
+
 ### How Annotations Work
 
 Annotations are stored in a JSON file alongside your PDF:
@@ -154,14 +166,13 @@ This approach:
 Uses the **Pointer Events API** for stylus detection:
 - `pointerType: "pen"` for Apple Pencil
 - `pressure` for line width variation
-- `tiltX/tiltY` for angle detection
-- Basic palm rejection (ignores touch when pen active)
+- Basic palm rejection (ignores touch events)
 
 ### Performance
 
-- **Lazy loading**: Pages render as you scroll
-- **Offscreen canvas**: Highlighter uses optimized rendering
-- **RAF throttling**: Smooth 60fps drawing
+- **Zero PDF overhead**: Uses Obsidian's renderer
+- **Efficient canvas**: Only redraws on changes
+- **ResizeObserver**: Syncs with viewport changes automatically
 
 ---
 
@@ -195,9 +206,9 @@ npm run build
 ```
 marginalia/
 ├── src/
-│   ├── main.ts              # Plugin entry point
-│   ├── PDFAnnotationView.ts # Main view with PDF rendering
-│   ├── DrawingCanvas.ts     # Drawing/annotation logic
+│   ├── main.ts              # Plugin entry point & PDF viewer hooks
+│   ├── AnnotationLayer.ts   # Canvas overlay & drawing logic
+│   ├── AnnotationStorage.ts # Save/load annotations
 │   └── styles.css           # UI styling
 ├── manifest.json            # Plugin metadata
 ├── package.json             # Dependencies
@@ -211,9 +222,8 @@ marginalia/
 | Limitation | Reason |
 |------------|--------|
 | **No Apple Pencil double-tap** | Requires native iOS API, not available in web |
-| **Slower than native apps** | Web canvas vs native Metal rendering |
-| **No PDF text selection** | Requires additional PDF.js integration |
 | **Separate annotation file** | Can't modify original PDF (yet) |
+| **Basic palm rejection** | Uses pointer event type detection |
 
 ---
 
