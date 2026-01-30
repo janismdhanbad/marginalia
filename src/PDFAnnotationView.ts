@@ -730,22 +730,22 @@ export class PDFAnnotationView extends ItemView {
 			const page = await this.pdfDoc.getPage(pageNum);
 
 			// Get the page's intrinsic rotation (0, 90, 180, or 270 degrees)
-			const rotation = page.rotate || 0;
-			console.log(`Marginalia: Page ${pageNum} has rotation: ${rotation}°`);
+			const pageRotation = page.rotate || 0;
+			console.log(`Marginalia: Page ${pageNum} has rotation: ${pageRotation}°`);
 
 			// Use devicePixelRatio for crisp rendering on high-DPI displays
 			const dpr = window.devicePixelRatio || 1;
 
-			// Force rotation to 0 to get proper upright viewport
-			const viewport = page.getViewport({ scale: this.scale, rotation: 0 });
+			// Get viewport with the page's natural rotation to get correct dimensions
+			const defaultViewport = page.getViewport({ scale: this.scale });
 
 			// CSS dimensions (display size)
-			const displayWidth = Math.floor(viewport.width);
-			const displayHeight = Math.floor(viewport.height);
+			let displayWidth = Math.floor(defaultViewport.width);
+			let displayHeight = Math.floor(defaultViewport.height);
 
 			// Canvas dimensions (actual pixel resolution for crisp rendering)
-			const canvasWidth = Math.floor(viewport.width * dpr);
-			const canvasHeight = Math.floor(viewport.height * dpr);
+			let canvasWidth = Math.floor(defaultViewport.width * dpr);
+			let canvasHeight = Math.floor(defaultViewport.height * dpr);
 
 			// Update wrapper size (CSS pixels)
 			pageElement.wrapper.style.width = `${displayWidth}px`;
@@ -767,15 +767,39 @@ export class PDFAnnotationView extends ItemView {
 			ctx.fillStyle = 'white';
 			ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-			// Render at higher resolution for crisp text, forcing rotation to 0
-			const highResViewport = page.getViewport({ scale: this.scale * dpr, rotation: 0 });
+			// Save the context state before applying transformations
+			ctx.save();
+
+			// Apply transformation to correct rotation
+			if (pageRotation === 180) {
+				// For 180° rotation: flip both axes
+				ctx.translate(canvasWidth, canvasHeight);
+				ctx.rotate(Math.PI); // 180 degrees in radians
+				console.log(`Marginalia: Applying 180° correction transform for page ${pageNum}`);
+			} else if (pageRotation === 90) {
+				// For 90° clockwise rotation: rotate counter-clockwise
+				ctx.translate(canvasWidth, 0);
+				ctx.rotate(Math.PI / 2); // 90 degrees
+				console.log(`Marginalia: Applying 90° correction transform for page ${pageNum}`);
+			} else if (pageRotation === 270) {
+				// For 270° clockwise rotation: rotate 90° counter-clockwise
+				ctx.translate(0, canvasHeight);
+				ctx.rotate(-Math.PI / 2); // -90 degrees
+				console.log(`Marginalia: Applying 270° correction transform for page ${pageNum}`);
+			}
+
+			// Now get viewport that will render as if rotation is 0 (corrected by our transform)
+			const renderViewport = page.getViewport({ scale: this.scale * dpr, rotation: 0 });
 
 			await page.render({
 				canvasContext: ctx,
-				viewport: highResViewport,
+				viewport: renderViewport,
 			}).promise;
 
-			console.log(`Marginalia: Page ${pageNum} PDF rendered at ${dpr}x resolution (rotation corrected from ${rotation}° to 0°)`);
+			// Restore the context state
+			ctx.restore();
+
+			console.log(`Marginalia: Page ${pageNum} PDF rendered at ${dpr}x resolution (rotation ${pageRotation}° corrected)`);
 
 			// Create drawing canvas for this page (use display dimensions)
 			pageElement.drawingCanvas = new DrawingCanvas(
