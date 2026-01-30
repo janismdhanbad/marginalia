@@ -40,6 +40,9 @@ export class AnnotationLayer {
 		file: TFile,
 		storage: AnnotationStorage
 	) {
+		console.log('AnnotationLayer: Initializing for', file.path);
+		console.log('AnnotationLayer: Container:', pdfContainer);
+
 		this.pdfContainer = pdfContainer;
 		this.file = file;
 		this.storage = storage;
@@ -49,6 +52,8 @@ export class AnnotationLayer {
 		this.loadAnnotations();
 		this.setupEventListeners();
 		this.setupObservers();
+
+		console.log('AnnotationLayer: Initialization complete');
 	}
 
 	private createToolbar() {
@@ -118,6 +123,8 @@ export class AnnotationLayer {
 	}
 
 	private createCanvas() {
+		console.log('AnnotationLayer: Creating canvas...');
+
 		// Create overlay canvas
 		this.canvas = document.createElement('canvas');
 		this.canvas.className = 'marginalia-canvas';
@@ -135,22 +142,57 @@ export class AnnotationLayer {
 		this.ctx.lineCap = 'round';
 		this.ctx.lineJoin = 'round';
 
+		// Find the PDF content area - try multiple selectors
+		let pdfContentArea = this.pdfContainer.querySelector('.pdf-container');
+
+		if (!pdfContentArea) {
+			console.log('AnnotationLayer: .pdf-container not found, trying .view-content');
+			pdfContentArea = this.pdfContainer.querySelector('.view-content');
+		}
+
+		if (!pdfContentArea) {
+			console.log('AnnotationLayer: .view-content not found, trying .workspace-leaf-content');
+			pdfContentArea = this.pdfContainer.querySelector('.workspace-leaf-content');
+		}
+
+		if (!pdfContentArea) {
+			console.log('AnnotationLayer: No suitable container found, using root container');
+			pdfContentArea = this.pdfContainer;
+		}
+
+		console.log('AnnotationLayer: Using container:', pdfContentArea);
+
 		// Position canvas over PDF
 		this.updateCanvasSize();
 
-		// Inject canvas into PDF viewer
-		const pdfCanvasContainer = this.pdfContainer.querySelector('.pdf-container');
-		if (pdfCanvasContainer) {
-			pdfCanvasContainer.appendChild(this.canvas);
-		}
+		// Make the container relative for absolute positioning
+		(pdfContentArea as HTMLElement).style.position = 'relative';
+
+		// Inject canvas
+		pdfContentArea.appendChild(this.canvas);
+		console.log('AnnotationLayer: Canvas injected');
 	}
 
 	private updateCanvasSize() {
-		const pdfCanvasContainer = this.pdfContainer.querySelector('.pdf-container') as HTMLElement;
-		if (!pdfCanvasContainer) return;
+		// Find the PDF content area
+		let pdfContentArea = this.pdfContainer.querySelector('.pdf-container') as HTMLElement;
 
-		const rect = pdfCanvasContainer.getBoundingClientRect();
+		if (!pdfContentArea) {
+			pdfContentArea = this.pdfContainer.querySelector('.view-content') as HTMLElement;
+		}
+
+		if (!pdfContentArea) {
+			pdfContentArea = this.pdfContainer.querySelector('.workspace-leaf-content') as HTMLElement;
+		}
+
+		if (!pdfContentArea) {
+			pdfContentArea = this.pdfContainer;
+		}
+
+		const rect = pdfContentArea.getBoundingClientRect();
 		const dpr = window.devicePixelRatio || 1;
+
+		console.log(`AnnotationLayer: Canvas size: ${rect.width}x${rect.height}, DPR: ${dpr}`);
 
 		// Set canvas size to match PDF container
 		this.canvas.width = rect.width * dpr;
@@ -185,26 +227,37 @@ export class AnnotationLayer {
 	}
 
 	private setupObservers() {
+		console.log('AnnotationLayer: Setting up observers...');
+
 		// Watch for PDF container resize
 		this.resizeObserver = new ResizeObserver(() => {
+			console.log('AnnotationLayer: Resize detected');
 			this.updateCanvasSize();
 		});
 
-		const pdfCanvasContainer = this.pdfContainer.querySelector('.pdf-container');
-		if (pdfCanvasContainer) {
-			this.resizeObserver.observe(pdfCanvasContainer as HTMLElement);
+		// Find the container to observe
+		let pdfContentArea = this.pdfContainer.querySelector('.pdf-container') as HTMLElement;
+		if (!pdfContentArea) {
+			pdfContentArea = this.pdfContainer.querySelector('.view-content') as HTMLElement;
 		}
+		if (!pdfContentArea) {
+			pdfContentArea = this.pdfContainer.querySelector('.workspace-leaf-content') as HTMLElement;
+		}
+		if (!pdfContentArea) {
+			pdfContentArea = this.pdfContainer;
+		}
+
+		this.resizeObserver.observe(pdfContentArea);
+		console.log('AnnotationLayer: ResizeObserver attached');
 
 		// Watch for scroll events (to sync annotations)
 		this.scrollHandler = () => {
-			// Canvas position is handled by CSS, but we might need to redraw
-			// if Obsidian's PDF viewer does something complex
+			// Canvas position is handled by CSS
 		};
 
-		const scrollContainer = this.pdfContainer.querySelector('.pdf-viewer');
-		if (scrollContainer) {
-			scrollContainer.addEventListener('scroll', this.scrollHandler);
-		}
+		// Attach scroll listener to the container
+		pdfContentArea.addEventListener('scroll', this.scrollHandler);
+		console.log('AnnotationLayer: Scroll handler attached');
 	}
 
 	private handlePointerDown(e: PointerEvent) {
