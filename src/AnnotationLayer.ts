@@ -200,6 +200,10 @@ export class AnnotationLayer {
 		this.canvas.style.width = `${rect.width}px`;
 		this.canvas.style.height = `${rect.height}px`;
 
+		// Reset context properties after canvas resize
+		this.ctx.lineCap = 'round';
+		this.ctx.lineJoin = 'round';
+
 		// Scale context for high-DPI
 		this.ctx.scale(dpr, dpr);
 
@@ -348,7 +352,7 @@ export class AnnotationLayer {
 			case 'highlighter':
 				this.ctx.globalCompositeOperation = 'source-over';
 				this.ctx.strokeStyle = this.currentColor;
-				this.ctx.globalAlpha = 0.3;
+				this.ctx.globalAlpha = 0.4;  // 40% opacity (60% see-through)
 				break;
 			case 'eraser':
 				this.ctx.globalCompositeOperation = 'destination-out';
@@ -364,15 +368,21 @@ export class AnnotationLayer {
 		for (const stroke of this.strokes) {
 			if (stroke.points.length === 0) continue;
 
-			// Save the current context state
-			this.ctx.save();
-
-			const originalTool = this.currentTool;
-			const originalColor = this.currentColor;
-
-			this.currentTool = stroke.tool;
-			this.currentColor = stroke.color;
-			this.setupContextForTool();
+			// Set context properties for this stroke
+			// Use explicit alpha values instead of relying on setupContextForTool
+			if (stroke.tool === 'highlighter') {
+				this.ctx.globalCompositeOperation = 'source-over';
+				this.ctx.strokeStyle = stroke.color;
+				this.ctx.globalAlpha = 0.4;  // 40% opacity (60% see-through)
+			} else if (stroke.tool === 'pen') {
+				this.ctx.globalCompositeOperation = 'source-over';
+				this.ctx.strokeStyle = stroke.color;
+				this.ctx.globalAlpha = 1.0;  // Full opacity for pen
+			} else if (stroke.tool === 'eraser') {
+				this.ctx.globalCompositeOperation = 'destination-out';
+				this.ctx.strokeStyle = 'rgba(0,0,0,1)';
+				this.ctx.globalAlpha = 1.0;
+			}
 
 			this.ctx.beginPath();
 			this.ctx.lineWidth = stroke.width;
@@ -383,15 +393,9 @@ export class AnnotationLayer {
 				this.ctx.lineTo(point.x, point.y);
 			}
 			this.ctx.stroke();
-
-			this.currentTool = originalTool;
-			this.currentColor = originalColor;
-
-			// Restore the context state
-			this.ctx.restore();
 		}
 
-		// Reset to current tool after redraw
+		// Reset to current tool settings
 		this.setupContextForTool();
 	}
 
