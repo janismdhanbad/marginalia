@@ -50,39 +50,56 @@ export default class PDFAnnotatorPlugin extends Plugin {
 	}
 
 	private injectAnnotationLayers() {
-		console.log('Marginalia: Searching for PDF viewers...');
+		console.log('========================================');
+		console.log('MARGINALIA DEBUG: Starting injection...');
+		console.log('========================================');
 
 		// Get all PDF leaves
 		const pdfLeaves = this.app.workspace.getLeavesOfType('pdf');
-		console.log(`Marginalia: Found ${pdfLeaves.length} PDF leaf/leaves`);
+		console.log(`PDF leaves found: ${pdfLeaves.length}`);
+
+		if (pdfLeaves.length === 0) {
+			console.warn('⚠️ NO PDF LEAVES FOUND! Is a PDF open?');
+			return;
+		}
 
 		pdfLeaves.forEach((leaf, index) => {
-			console.log(`Marginalia: Processing PDF leaf ${index + 1}...`);
+			console.log(`\n--- Processing PDF leaf ${index + 1} ---`);
 
 			const view = leaf.view as any;
-			const file = view.file as TFile;
+			console.log('View object:', view);
+			console.log('View type:', leaf.view.getViewType());
 
+			const file = view.file as TFile;
 			if (!file) {
-				console.log('Marginalia: No file in this leaf, skipping');
+				console.error('❌ No file in this leaf!');
 				return;
 			}
-
-			console.log(`Marginalia: Leaf contains file: ${file.path}`);
+			console.log(`✓ File: ${file.path}`);
 
 			// Get the view container
 			const viewElement = view.containerEl as HTMLElement;
 			if (!viewElement) {
-				console.log('Marginalia: No container element found');
+				console.error('❌ No containerEl found!');
 				return;
 			}
+			console.log('✓ Container element found');
+			console.log('Container classes:', viewElement.className);
+			console.log('Container HTML (first 200 chars):', viewElement.innerHTML.substring(0, 200));
+
+			// Debug: Show all child elements
+			console.log('Container children:');
+			Array.from(viewElement.children).forEach((child, i) => {
+				console.log(`  ${i}: ${child.tagName}.${child.className}`);
+			});
 
 			// Skip if already injected
 			if (this.activeAnnotationLayers.has(viewElement)) {
-				console.log('Marginalia: Already injected, skipping');
+				console.log('ℹ️ Already injected, skipping');
 				return;
 			}
 
-			console.log('Marginalia: Injecting annotation layer...');
+			console.log('🚀 Attempting to inject annotation layer...');
 
 			try {
 				// Create and inject annotation layer
@@ -93,11 +110,17 @@ export default class PDFAnnotatorPlugin extends Plugin {
 				);
 
 				this.activeAnnotationLayers.set(viewElement, annotationLayer);
-				console.log(`Marginalia: ✓ Successfully injected for ${file.path}`);
+				console.log(`✅ SUCCESS! Injected for ${file.path}`);
 			} catch (error) {
-				console.error('Marginalia: Failed to inject annotation layer:', error);
+				console.error('❌ INJECTION FAILED:', error);
+				console.error('Error stack:', (error as Error).stack);
 			}
 		});
+
+		console.log('\n========================================');
+		console.log('MARGINALIA DEBUG: Injection complete');
+		console.log(`Active layers: ${this.activeAnnotationLayers.size}`);
+		console.log('========================================\n');
 	}
 
 	private findLeafByContainer(container: HTMLElement): WorkspaceLeaf | null {
