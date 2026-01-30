@@ -364,6 +364,9 @@ export class AnnotationLayer {
 		for (const stroke of this.strokes) {
 			if (stroke.points.length === 0) continue;
 
+			// Save the current context state
+			this.ctx.save();
+
 			const originalTool = this.currentTool;
 			const originalColor = this.currentColor;
 
@@ -383,7 +386,13 @@ export class AnnotationLayer {
 
 			this.currentTool = originalTool;
 			this.currentColor = originalColor;
+
+			// Restore the context state
+			this.ctx.restore();
 		}
+
+		// Reset to current tool after redraw
+		this.setupContextForTool();
 	}
 
 	private setTool(tool: Tool) {
